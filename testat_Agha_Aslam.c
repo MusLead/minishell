@@ -161,6 +161,95 @@ void handle_cd(char **args)
     }
 }
 
+void handle_multi_pipe(char *input) {
+    // Split by '|'
+    char *commands[MAX_ARGS];
+    int count = 0;
+    char *saveptr;
+
+    char *token = strtok_r(input, "|", &saveptr);
+    while (token && count < MAX_ARGS) {
+        while (*token == ' ') token++; // skip leading spaces
+        if (*token == '\0') {
+            fprintf(stderr, "Error: Empty command between pipes not allowed.\n");
+            return;
+        }
+        commands[count++] = token;
+        token = strtok_r(NULL, "|", &saveptr);
+    }
+
+    if (count == 0) {
+        fprintf(stderr, "Error: No valid command detected.\n");
+        return;
+    }
+
+    // If original input starts or ends with '|', reject
+    size_t len = strlen(input);
+    if (input[0] == '|' || input[len - 1] == '|') {
+        // > after I learn in the Uebung 6, I think it is better if I just set an error commands for the right one too.
+        fprintf(stderr, "Error: Pipe at beginning or end not allowed.\n");
+        return;
+    }
+
+    int **pipes = malloc((count - 1) * sizeof(int *));
+    for (int i = 0; i < count - 1; ++i) {
+        pipes[i] = malloc(2 * sizeof(int));
+        if (pipe(pipes[i]) == -1) {
+            perror("pipe failed");
+            return;
+        }
+    }
+
+    for (int i = 0; i < count; ++i) {
+        char *args[MAX_ARGS];
+        // Tokenize this command
+        tokenize_input(commands[i], args);
+
+        pid_t pid = fork();
+        if (pid == 0) {
+            // > how the dup works https://youtu.be/PIb2aShU_H4?si=WET26X4zSAwlRPhu$0
+            if (i > 0) { // Not first: read from previous pipe
+                dup2(pipes[i - 1][0], STDIN_FILENO);
+            }
+            if (i < count - 1) { // Not last: write to next pipe
+                dup2(pipes[i][1], STDOUT_FILENO); // > take the Process content of the index pipefd[1] and into the index of STDOUT located, so that the stdout (output) values will be redirected into the pipe.
+            }
+
+            // Close all pipes in child, because dup2()-functionality: duplicates the file descriptors (see Ueubng 6)
+            for (int j = 0; j < count - 1; ++j) {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
+            }
+
+            execvp(args[0], args); // > execvp means execute program with vector (array) as input and uses path to look for the program
+            perror("execv failed");
+            exit(1);
+        } else if (pid > 0) {
+            // Parent process: increment child counter
+            child_count++;
+        }
+    }
+
+    // Close all pipes in parent
+    for (int i = 0; i < count - 1; ++i) {
+        close(pipes[i][0]);
+        close(pipes[i][1]);
+        free(pipes[i]);
+    }
+    free(pipes);
+
+    // Wait for all children
+    int status;
+    for (int i = 0; i < count; ++i) {
+        wait(&status);
+        if (child_count > 0) child_count--;
+    }
+
+    if (WIFEXITED(status)) last_status = WEXITSTATUS(status);
+    else last_status = -1;
+}
+
+
 int main() {
     signal(SIGINT, handle_sigint); // Catch Ctrl+C
     signal(SIGHUP, handle_sighup); // Catch SIGHUP
@@ -193,6 +282,13 @@ int main() {
             if (strlen(cmd) == 0) {
                 cmd = strtok_r(NULL, ";", &saveptr_cmds);
                 continue;
+            }
+
+            if (strchr(cmd, '|'))
+            {
+                handle_multi_pipe(cmd);
+                cmd = strtok_r(NULL, ";", &saveptr_cmds); // > go to to the next available command, take the pointer to the next command.
+                continue;                                // > For the next command, we go back and see if there is Pipe or simmilar.
             }
 
             // Special: exit
