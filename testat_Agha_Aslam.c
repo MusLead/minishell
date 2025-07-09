@@ -249,127 +249,128 @@ void handle_cd(char **args)
     }
 }
 
-int shell_functionality(int *retFlag) {
-    *retFlag = 1;
-    print_prompt();
-    fflush(stdout);
-    char input_line[MAX_LINE];
-
-    if (!fgets(input_line, MAX_LINE, stdin)) {
-        if (feof(stdin)) {
-            handle_sighup(1);
-            clearerr(stdin);
-            *retFlag = 3;
-            return 0;
-        } else {
-            printf("[Hint] Unknown input, exit terminal!\n");
-            return EXIT_FAILURE;
-        }
-    }
-
-    input_line[strcspn(input_line, "\n")] = '\0';
-    if (DEBUG) printf("[DEBUG] shell_functionality, Input line: '%s'\n", input_line);
-
-    char *saveptr;
-    char *command = strtok_r(input_line, ";", &saveptr);
-
-    while (command) {
-        while (*command == ' ') command++;  // Trim leading spaces
-
-        // Skip empty command
-        if (*command == '\0') {
-            command = strtok_r(NULL, ";", &saveptr);
-            continue;
-        }
-
-        // Copy command into a stack buffer so strtok_r can safely modify it
-        char command_copy[MAX_LINE];
-        strncpy(command_copy, command, sizeof(command_copy));
-        command_copy[sizeof(command_copy) - 1] = '\0';
-
-        // Detect pipe
-        if (strchr(command_copy, '|')) {
-            handle_multi_pipe(command_copy);
-            command = strtok_r(NULL, ";", &saveptr);
-            continue;
-        }
-
-        // New local args array
-        char *args[MAX_ARGS];
-        int argc = parse_input(command_copy, args);
-
-        if (argc == 0) {
-            command = strtok_r(NULL, ";", &saveptr);
-            continue;
-        }
-
-        // Built-in: exit
-        if (strcmp(args[0], "exit") == 0) {
-            printf("Shell terminated.\n");
-            *retFlag = 1;
-            return EXIT_SUCCESS;
-        }
-
-        // Built-in: cd
-        if (strcmp(args[0], "cd") == 0) {
-            handle_cd(args);
-            command = strtok_r(NULL, ";", &saveptr);
-            continue;
-        }
-
-        // Built-in: ret
-        if (strcmp(args[0], "ret") == 0) {
-            handle_sighup(0);
-            command = strtok_r(NULL, ";", &saveptr);
-            continue;
-        }
-
-        pid_t pid = fork();
-        if (pid < 0) {
-            perror("fork failed");
-            last_status = 1;
-        } else if (pid == 0) {
-            if (DEBUG) printf("[DEBUG] Executing command: %s\n", args[0]);
-            if (strchr(args[0], '/')) {
-                execv(args[0], args);
-                perror("execv failed");
-            } else {
-                execvp(args[0], args);
-                perror("execvp failed");
-            }
-            exit(1);
-        } else {
-            child_count++;
-            int status;
-            waitpid(pid, &status, 0);
-            child_count--;
-            last_status = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-        }
-
-        command = strtok_r(NULL, ";", &saveptr);
-    }
-
-    *retFlag = 0;
-    return 0;
-}
-
 int main() {
     signal(SIGINT, handle_sigint); // Catch Ctrl+C
     signal(SIGHUP, handle_sighup); // Catch SIGHUP
 
     while (1) {
-        int retFlag;
-        int retVal = shell_functionality(&retFlag);
-        if (retFlag == 3)
-            continue;
-        if (retFlag == 1)
-        if (retFlag == 1) {
-            // clean up ALL children, so that the processes are not left hanging
-            if (DEBUG) printf("[DEBUG] Cleaning up all children processes...\n");
-            while (has_children()) {
-                wait(NULL);
+        print_prompt();
+        char input_line[MAX_LINE];
+
+        if (!fgets(input_line, MAX_LINE, stdin))
+        {
+            if (feof(stdin))
+            {
+                handle_sighup(1);
+                clearerr(stdin);
+                continue; // back to top of loop
             }
-            return retVal;
+            else
+            {
+                printf("[Hint] Unknown Inputs, exit terminal!\n");
+                return EXIT_FAILURE;
+            }
+        }
+
+        input_line[strcspn(input_line, "\n")] = '\0';
+        if (DEBUG) printf("[DEBUG] shell_functionality, Input line: '%s'\n", input_line);
+
+        char *saveptr;
+        char *command = strtok_r(input_line, ";", &saveptr);
+
+        while (command)
+        {
+            while (*command == ' ')
+                command++;
+
+            char *command_copy = strdup(command);
+            if (!command_copy)
+            {
+                fprintf(stderr, "Error: Could not allocate memory for command.\n");
+                break;
+            }
+
+            char *pipe = strchr(command, '|');
+            if (pipe)
+            {
+                handle_multi_pipe(command);
+                free(command_copy);
+                command = strtok_r(NULL, ";", &saveptr);
+                continue;
+            }
+
+            char *args[MAX_ARGS];
+            parse_input(command_copy, args);
+
+            if (!args || !args[0])
+            {
+                free(command_copy);
+                
+                command = strtok_r(NULL, ";", &saveptr);
+                continue;
+            }
+
+            if (strcmp(args[0], "exit") == 0)
+            {
+                
+                free(command_copy);
+                printf("Shell terminated.\n");
+                return EXIT_SUCCESS;
+            }
+
+            if (strcmp(args[0], "cd") == 0)
+            {
+                handle_cd(args);
+                free(command_copy);
+                
+                command = strtok_r(NULL, ";", &saveptr);
+                continue;
+            }
+
+            if (strcmp(args[0], "ret") == 0)
+            {
+                handle_sighup(0);
+                
+                free(command_copy);
+                command = strtok_r(NULL, ";", &saveptr);
+                continue;
+            }
+
+            pid_t pid = fork();
+            if (pid < 0)
+            {
+                perror("fork failed");
+                last_status = 1;
+            }
+            else if (pid == 0)
+            {
+                if (DEBUG) printf("[DEBUG] Executing command: %s, with strchr: %s\n", args[0], strchr(args[0], '/'));
+                if (strchr(args[0], '/') != NULL) {
+                    execv(args[0], args);
+                    perror("execv failed");
+                } else {
+                    execvp(args[0], args);
+                    perror("execvp failed");
+                }
+                exit(1);
+            }
+            else
+            {
+                child_count++;
+                int status;
+                waitpid(pid, &status, 0);
+                child_count--;
+                last_status = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+            }
+
+            
+            free(command_copy);
+            command = strtok_r(NULL, ";", &saveptr);
+        }
+
+        if (DEBUG) printf("[DEBUG] Cleaning up all children processes...\n");
+        while (has_children()) {
+            wait(NULL);
         }
     }
 
