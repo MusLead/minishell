@@ -276,94 +276,124 @@ int main() {
     signal(SIGINT, handle_sigint); // Catch Ctrl+C
     signal(SIGHUP, handle_sighup); // Catch SIGHUP
 
-    char line[MAX_CMD_LEN];
-    char *args[MAX_ARGS];
-
     while (1) {
         print_prompt();
-        fflush(stdout);
+        char input_line[MAX_CMD_LEN];
 
-        if (fgets(line, sizeof(line), stdin) == NULL) {
-            printf("\n");
-            break; // EOF
+        if (!fgets(input_line, MAX_CMD_LEN, stdin))
+        {
+            if (feof(stdin))
+            {
+                handle_sighup(1);
+                clearerr(stdin);
+                continue; // back to top of loop
+            }
+            else
+            {
+                printf("[Hint] Unknown Inputs, exit terminal!\n");
+                return EXIT_FAILURE;
+            }
         }
 
-        // Remove newline
-        line[strcspn(line, "\n")] = '\0';
+        input_line[strcspn(input_line, "\n")] = '\0';
+        if (DEBUG) printf("[DEBUG] shell_functionality, Input line: '%s'\n", input_line);
 
-        if (strlen(line) == 0) continue;
+        char *saveptr;
+        char *command = strtok_r(input_line, ";", &saveptr);
 
-        // Split input by ';'
-        char *saveptr_cmds;
-        char *cmd = strtok_r(line, ";", &saveptr_cmds);
+        while (command)
+        {
+            while (*command == ' ')
+                command++;
 
-        while (cmd != NULL) {
-            // Trim leading spaces
-            while (*cmd == ' ') cmd++;
-
-            if (strlen(cmd) == 0) {
-                cmd = strtok_r(NULL, ";", &saveptr_cmds);
-                continue;
-            }
-
-            if (strchr(cmd, '|'))
+            char *command_copy = strdup(command);
+            if (!command_copy)
             {
-                handle_multi_pipe(cmd);
-                cmd = strtok_r(NULL, ";", &saveptr_cmds); // > go to to the next available command, take the pointer to the next command.
-                continue;                                // > For the next command, we go back and see if there is Pipe or simmilar.
+                fprintf(stderr, "Error: Could not allocate memory for command.\n");
+                break;
             }
 
-            // Special: exit
-            if (strcmp(cmd, "exit") == 0) {
-                printf("Bye!\n");
-                exit(0);
-            }
-
-            // Special: ret
-            if (strcmp(cmd, "ret") == 0) {
-                handle_sighup(0);
-                cmd = strtok_r(NULL, ";", &saveptr_cmds);
+            char *pipe = strchr(command, '|');
+            if (pipe)
+            {
+                handle_multi_pipe(command);
+                free(command_copy);
+                command = strtok_r(NULL, ";", &saveptr);
                 continue;
             }
 
-            // Tokenize this command
-            tokenize_input(cmd, args);
+            char *args[MAX_ARGS];
+            tokenize_input(command_copy, args);
 
-            // Special: cd
-            if (strcmp(args[0], "cd") == 0) {
+            if (!args || !args[0])
+            {
+                free(command_copy);
+                
+                command = strtok_r(NULL, ";", &saveptr);
+                continue;
+            }
+
+            if (strcmp(args[0], "exit") == 0)
+            {
+                
+                free(command_copy);
+                printf("Shell terminated.\n");
+                return EXIT_SUCCESS;
+            }
+
+            if (strcmp(args[0], "cd") == 0)
+            {
                 handle_cd(args);
-                cmd = strtok_r(NULL, ";", &saveptr_cmds);
+                free(command_copy);
+                
+                command = strtok_r(NULL, ";", &saveptr);
                 continue;
             }
 
-            // Fork & execute
-            pid_t pid = fork();
+            if (strcmp(args[0], "ret") == 0)
+            {
+                handle_sighup(0);
+                
+                free(command_copy);
+                command = strtok_r(NULL, ";", &saveptr);
+                continue;
+            }
 
-            if (pid == 0) {
-                // Child
-                if (strcmp(args[0], "/bin/wc") == 0) {
+            pid_t pid = fork();
+            if (pid < 0)
+            {
+                perror("fork failed");
+                last_status = 1;
+            }
+            else if (pid == 0)
+            {
+                if (DEBUG) printf("[DEBUG] Executing command: %s, with strchr: %s\n", args[0], strchr(args[0], '/'));
+                if (strchr(args[0], '/') != NULL) {
                     execv(args[0], args);
-                    perror("execv");
-                    exit(1);
+                    perror("execv failed");
                 } else {
                     execvp(args[0], args);
-                    perror("execvp");
-                    exit(1);
+                    perror("execvp failed");
                 }
-            } else if (pid > 0) {
+                exit(1);
+            }
+            else
+            {
                 child_count++;
                 int status;
                 waitpid(pid, &status, 0);
                 child_count--;
                 last_status = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-            } else {
-                perror("fork");
-                last_status = 1;
-                exit(1);
             }
 
-            // Move to next command
-            cmd = strtok_r(NULL, ";", &saveptr_cmds);
+            
+            free(command_copy);
+            command = strtok_r(NULL, ";", &saveptr);
+        }
+
+        if (DEBUG) printf("[DEBUG] Cleaning up all children processes...\n");
+        while (has_children()) {
+            wait(NULL);
         }
     }
 
