@@ -7,8 +7,23 @@
 #define MAX_CMD_LEN 1024
 #define MAX_ARGS 64
 
+// Tokenize input safely using strtok_r
+int tokenize_input(char *line, char *args[]) {
+    int argc = 0;
+    char *saveptr;  // state for strtok_r
+    char *token = strtok_r(line, " ", &saveptr);
+
+    while (token != NULL && argc < MAX_ARGS - 1) {
+        args[argc++] = token;
+        token = strtok_r(NULL, " ", &saveptr);
+    }
+    args[argc] = NULL;
+    return argc;
+}
+
 int main() {
     char line[MAX_CMD_LEN];
+    char *args[MAX_ARGS];
 
     while (1) {
         printf("→ ");
@@ -24,18 +39,14 @@ int main() {
 
         if (strlen(line) == 0) continue;
 
-        // Tokenize input
-        char *args[MAX_ARGS];
-        int argc = 0;
-
-        char *token = strtok(line, " ");
-        while (token != NULL && argc < MAX_ARGS - 1) {
-            args[argc++] = token;
-            token = strtok(NULL, " ");
+        // Built-in exit
+        if (strcmp(line, "exit") == 0) {
+            printf("Bye!\n");
+            break;
         }
-        args[argc] = NULL;
 
-        
+        // Tokenize using strtok_r
+        tokenize_input(line, args);
 
         pid_t pid = fork();
 
@@ -43,7 +54,6 @@ int main() {
             // Child process
 
             if (strcmp(args[0], "/bin/wc") == 0) {
-                // For demonstration: using execv, since it's fully qualified
                 execv(args[0], args);
                 perror("execv");
                 exit(1);
@@ -54,7 +64,6 @@ int main() {
             }
 
         } else if (pid > 0) {
-            // Parent process waits
             int status;
             waitpid(pid, &status, 0);
         } else {
