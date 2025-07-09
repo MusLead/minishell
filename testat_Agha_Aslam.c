@@ -45,7 +45,6 @@ void print_prompt() {
     }
 }
 
-
 // Check if process has children without blocking
 int has_children() {
     pid_t result = waitpid(-1, NULL, WNOHANG);
@@ -108,6 +107,30 @@ int tokenize_input(char *line, char *args[]) {
     return argc;
 }
 
+// Handles the 'cd' command to change directories
+void handle_cd(char **args)
+{
+    const char *target = args[1] ? args[1] : getenv("HOME");
+    char path[PATH_MAX];
+
+    if (args[1] && args[1][0] == '~')
+    {
+        const char *home = getenv("HOME");
+        snprintf(path, sizeof(path), "%s%s", home, args[1] + 1); // > if the first character of args[1] is '~', then we take the home directory and concatenate it with the rest of the path.
+        target = path;
+    }
+
+    if (chdir(target) != 0) // > chdir: change directory to the given path
+    {
+        fprintf(stderr, "cd failed: %s\n", strerror(errno)); // > send a message why it does not work.
+        last_status = 1;
+    }
+    else
+    {
+        last_status = 0;
+    }
+}
+
 int main() {
     signal(SIGINT, handle_sigint); // Catch Ctrl+C
     signal(SIGHUP, handle_sighup); // Catch SIGHUP
@@ -145,6 +168,13 @@ int main() {
 
         // Tokenize using strtok_r
         tokenize_input(line, args);
+
+        // built-in: cd
+        if (strncmp(line, "cd", 2) == 0)
+        {
+            handle_cd(args);
+            continue;
+        }
 
         pid_t pid = fork();
 
