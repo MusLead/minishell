@@ -12,13 +12,14 @@
 
 #define DEBUG 0 // if you want to disable the debug messages, just change this to 0
 
+int last_status = 0;                   // Memory for return value
+volatile sig_atomic_t child_count = 0; // Track number of child processes
 
-int last_status = 0;  // Memory for return value
-volatile sig_atomic_t child_count = 0;  // Track number of child processes
-
-void print_prompt() {
+void print_prompt()
+{
     char cwd[PATH_MAX];
-    if (getcwd(cwd, sizeof(cwd)) != NULL) { // > getcwd: get current location.
+    if (getcwd(cwd, sizeof(cwd)) != NULL)
+    { // > getcwd: get current location.
         char cwd_copy[PATH_MAX];
         strncpy(cwd_copy, cwd, PATH_MAX);
 
@@ -27,79 +28,108 @@ void print_prompt() {
         char *saveptr;
         char *token = strtok_r(cwd_copy, "/", &saveptr);
 
-        while (token) {
+        while (token)
+        {
             folders[count++] = token;
             token = strtok_r(NULL, "/", &saveptr);
         }
 
-        if (count >= 2) {
+        if (count >= 2)
+        {
             printf("%s/%s> ", folders[count - 2], folders[count - 1]);
-        } else if (count == 1) {
+        }
+        else if (count == 1)
+        {
             printf("%s> ", folders[0]);
-        } else {
+        }
+        else
+        {
             printf("/> ");
         }
         fflush(stdout);
-    } else {
+    }
+    else
+    {
         perror("getcwd error");
     }
 }
 
 // Check if process has children without blocking
-int has_children() {
+int has_children()
+{
     pid_t result = waitpid(-1, NULL, WNOHANG);
-    
-    if (result > 0) {
+
+    if (result > 0)
+    {
         // Child process was reaped, decrement counter
-        if (child_count > 0) child_count--;
+        if (child_count > 0)
+            child_count--;
         return (child_count > 0);
-    } else if (result == 0) {
+    }
+    else if (result == 0)
+    {
         // Children exist but none have terminated
         return (child_count > 0);
-    } else if (result == -1 && errno == ECHILD) {
+    }
+    else if (result == -1 && errno == ECHILD)
+    {
         // No children exist
         child_count = 0;
         return 0;
-    } else {
+    }
+    else
+    {
         // Error occurred, assume no children
         return 0;
     }
 }
 
 // Signal handling for Ctrl+C
-void handle_sigint(int sig) {
+void handle_sigint(int sig)
+{
     // Only print the hint if we do not have any children
-    if (!has_children()) { 
+    if (!has_children())
+    {
         // without this if-statement, the prompt will be printed twice, once here and once in the main loop
         printf("\n[Hint] Terminate the shell using the command 'exit'.\n");
         // > if there are still children, then just print the prompt again, so that the user can give another input.
-        print_prompt(); 
+        print_prompt();
         fflush(stdout);
-    } else {
+    }
+    else
+    {
         // If there are children, just do not print the prompt and the Hint
-        if(DEBUG) printf("[DEBUG] The programm is successfully terminated!\n");
-        else printf("\n");
+        if (DEBUG)
+            printf("[DEBUG] The programm is successfully terminated!\n");
+        else
+            printf("\n");
         fflush(stdout);
     }
 }
 
 // Display of last return value
-void handle_sighup(int sig) {
-    if(sig == 0) {
-        if(DEBUG) printf("[DEBUG] Last return value: %d\n", last_status);
+void handle_sighup(int sig)
+{
+    if (sig == 0)
+    {
+        if (DEBUG)
+            printf("[DEBUG] Last return value: %d\n", last_status);
         printf("%d\n", last_status);
     }
-    else printf("\n[Hint] SIGHUP detected. Last return value: %d\n", last_status);
+    else
+        printf("\n[Hint] SIGHUP detected. Last return value: %d\n", last_status);
     fflush(stdout);
 }
 
 // Tokenize input safely using strtok_r
-int tokenize_input(char *line, char *args[]) {
+int tokenize_input(char *line, char *args[])
+{
     int argc = 0;
-    char *saveptr;  // state for strtok_r
+    char *saveptr; // state for strtok_r
     char *token = strtok_r(line, " ", &saveptr);
 
-    while (token != NULL && argc < MAX_ARGS - 1) {
+    while (token != NULL && argc < MAX_ARGS - 1)
+    {
         args[argc++] = token;
         token = strtok_r(NULL, " ", &saveptr);
     }
@@ -152,55 +182,70 @@ int main() {
 
         if (strlen(line) == 0) continue;
 
-        // Built-in exit
-        if (strcmp(line, "exit") == 0) {
-            printf("Bye!\n");
-            break;
-        }
+        // Split input by ';'
+        char *saveptr_cmds;
+        char *cmd = strtok_r(line, ";", &saveptr_cmds);
 
-        // Built-in: ret
-        if (strcmp(line, "ret") == 0)
-        {
-            handle_sighup(0);
-            //free(line);
-            continue;
-        }
+        while (cmd != NULL) {
+            // Trim leading spaces
+            while (*cmd == ' ') cmd++;
 
-        // Tokenize using strtok_r
-        tokenize_input(line, args);
+            if (strlen(cmd) == 0) {
+                cmd = strtok_r(NULL, ";", &saveptr_cmds);
+                continue;
+            }
 
-        // built-in: cd
-        if (strncmp(line, "cd", 2) == 0)
-        {
-            handle_cd(args);
-            continue;
-        }
+            // Special: exit
+            if (strcmp(cmd, "exit") == 0) {
+                printf("Bye!\n");
+                exit(0);
+            }
 
-        pid_t pid = fork();
+            // Special: ret
+            if (strcmp(cmd, "ret") == 0) {
+                handle_sighup(0);
+                cmd = strtok_r(NULL, ";", &saveptr_cmds);
+                continue;
+            }
 
-        if (pid == 0) {
-            // Child process
+            // Tokenize this command
+            tokenize_input(cmd, args);
 
-            if (strcmp(args[0], "/bin/wc") == 0) {
-                execv(args[0], args);
-                perror("execv");
-                exit(1);
+            // Special: cd
+            if (strcmp(args[0], "cd") == 0) {
+                handle_cd(args);
+                cmd = strtok_r(NULL, ";", &saveptr_cmds);
+                continue;
+            }
+
+            // Fork & execute
+            pid_t pid = fork();
+
+            if (pid == 0) {
+                // Child
+                if (strcmp(args[0], "/bin/wc") == 0) {
+                    execv(args[0], args);
+                    perror("execv");
+                    exit(1);
+                } else {
+                    execvp(args[0], args);
+                    perror("execvp");
+                    exit(1);
+                }
+            } else if (pid > 0) {
+                child_count++;
+                int status;
+                waitpid(pid, &status, 0);
+                child_count--;
+                last_status = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
             } else {
-                execvp(args[0], args);
-                perror("execvp");
+                perror("fork");
+                last_status = 1;
                 exit(1);
             }
 
-        } else if (pid > 0) {
-            child_count++; // Increment child counter
-            int status;
-            waitpid(pid, &status, 0);
-            child_count--; // Decrement child counter when child finishes
-            last_status = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-        } else {
-            perror("fork");
-            last_status = 1;
-            exit(1);
+            // Move to next command
+            cmd = strtok_r(NULL, ";", &saveptr_cmds);
         }
     }
 
