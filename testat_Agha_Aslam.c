@@ -252,6 +252,7 @@ void handle_cd(char **args)
 int shell_functionality(int *retFlag) {
     *retFlag = 1;
     print_prompt();
+    fflush(stdout);
     char input_line[MAX_LINE];
 
     if (!fgets(input_line, MAX_LINE, stdin)) {
