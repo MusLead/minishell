@@ -15,6 +15,7 @@
 int last_status = 0;                   // Memory for return value
 volatile sig_atomic_t child_count = 0; // Track number of child processes
 
+
 void print_prompt()
 {
     char cwd[PATH_MAX];
@@ -124,6 +125,10 @@ void handle_sighup(int sig)
 // Tokenize input safely using strtok_r
 int tokenize_input(char *line, char *args[])
 {
+
+    // Iterate through the input_line and split it by spaces
+    // strtok_r is used for thread-safe tokenization
+    // we save each token (word of arguments) into the args array
     int argc = 0;
     char *saveptr; // state for strtok_r
     char *token = strtok_r(line, " ", &saveptr);
@@ -137,30 +142,13 @@ int tokenize_input(char *line, char *args[])
     return argc;
 }
 
-// Handles the 'cd' command to change directories
-void handle_cd(char **args)
-{
-    const char *target = args[1] ? args[1] : getenv("HOME");
-    char path[PATH_MAX];
-
-    if (args[1] && args[1][0] == '~')
-    {
-        const char *home = getenv("HOME");
-        snprintf(path, sizeof(path), "%s%s", home, args[1] + 1); // > if the first character of args[1] is '~', then we take the home directory and concatenate it with the rest of the path.
-        target = path;
-    }
-
-    if (chdir(target) != 0) // > chdir: change directory to the given path
-    {
-        fprintf(stderr, "cd failed: %s\n", strerror(errno)); // > send a message why it does not work.
-        last_status = 1;
-    }
-    else
-    {
-        last_status = 0;
-    }
-}
-
+/*
+ * Handles the pipe between two or more programs
+ * The pipe() system call creates a unidirectional communication channel.
+ * For N piped commands, N-1 pipes are needed to transfer data from one command to the next.
+ * Each pipe consists of a read and write end (pipefd[0] and pipefd[1]).
+ * We use dup2() to redirect stdin and stdout to the appropriate pipe ends.
+ */
 void handle_multi_pipe(char *input) {
     // Split by '|'
     char *commands[MAX_ARGS];
@@ -249,6 +237,29 @@ void handle_multi_pipe(char *input) {
     else last_status = -1;
 }
 
+// Handles the 'cd' command to change directories
+void handle_cd(char **args)
+{
+    const char *target = args[1] ? args[1] : getenv("HOME");
+    char path[PATH_MAX];
+
+    if (args[1] && args[1][0] == '~')
+    {
+        const char *home = getenv("HOME");
+        snprintf(path, sizeof(path), "%s%s", home, args[1] + 1); // > if the first character of args[1] is '~', then we take the home directory and concatenate it with the rest of the path.
+        target = path;
+    }
+
+    if (chdir(target) != 0) // > chdir: change directory to the given path
+    {
+        fprintf(stderr, "cd failed: %s\n", strerror(errno)); // > send a message why it does not work.
+        last_status = 1;
+    }
+    else
+    {
+        last_status = 0;
+    }
+}
 
 int main() {
     signal(SIGINT, handle_sigint); // Catch Ctrl+C
