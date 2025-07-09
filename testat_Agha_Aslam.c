@@ -136,9 +136,6 @@ void handle_sighup(int sig)
  */
 int tokenize_input(char *line, char *args[])
 {
-    // allocate memory for args array so that it can hold up to MAX_ARGS arguments
-    char **args = malloc(MAX_ARGS * sizeof(char *));
-    if (!args) return NULL;
 
     // Iterate through the input_line and split it by spaces
     // strtok_r is used for thread-safe tokenization
@@ -153,7 +150,7 @@ int tokenize_input(char *line, char *args[])
     }
 
     args[argc] = NULL; // > to make sure that the arrays end! therefore NULL
-    return args;    // > args will be freed later after it is not being used anymore, especially in main!
+    return argc;    
 }
 
 
