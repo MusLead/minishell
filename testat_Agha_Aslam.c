@@ -15,7 +15,12 @@
 int last_status = 0;                   // Memory for return value
 volatile sig_atomic_t child_count = 0; // Track number of child processes
 
-
+/*
+ * Displays the current path as shell prompt.
+ * This loop splits the current working directory path by '/'.
+ * The folder names are stored in an array, and only the last two entries
+ * are printed to keep the shell prompt concise and informative.
+ */
 void print_prompt()
 {
     char cwd[PATH_MAX];
@@ -122,10 +127,15 @@ void handle_sighup(int sig)
     fflush(stdout);
 }
 
-// Tokenize input safely using strtok_r
+/*
+ * Splits an input line into arguments for command execution.
+ * The input_line is split into tokens by space character (' ').
+ * Each token becomes an argument: the command itself, options, or filenames.
+ * strtok_r modifies input_line by inserting null terminators and returns a pointer to each word.
+ * The resulting args[] is a NULL-terminated array suitable for execvp().
+ */
 int tokenize_input(char *line, char *args[])
 {
-
     // Iterate through the input_line and split it by spaces
     // strtok_r is used for thread-safe tokenization
     // we save each token (word of arguments) into the args array
