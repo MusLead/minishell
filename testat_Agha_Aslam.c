@@ -282,17 +282,21 @@ int main() {
 
         if (!fgets(input_line, MAX_CMD_LEN, stdin))
         {
-            if (feof(stdin))
-            {
-                handle_sighup(1);
-                clearerr(stdin);
-                continue; // back to top of loop
-            }
-            else
-            {
-                printf("[Hint] Unknown Inputs, exit terminal!\n");
-                return EXIT_FAILURE;
-            }
+            printf("\n");
+            break; // EOF
+            // diese Bereich ist problematisch -------------------------
+            // if (feof(stdin))
+            // {
+            //     handle_sighup(1);
+            //     clearerr(stdin);
+            //     continue; // back to top of loop
+            // }
+            // else
+            // {
+            //     printf("[Hint] Unknown Inputs, exit terminal!\n");
+            //     return 0;
+            // }
+            //----------------------------------------------------------
         }
 
         input_line[strcspn(input_line, "\n")] = '\0';
