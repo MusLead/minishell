@@ -15,6 +15,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <errno.h>
+#include <linux/limits.h>
 
 #define MAX_ARGS 100 
 #define MAX_LINE 1024
