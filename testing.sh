@@ -1,0 +1,1 @@
+gcc ../testat_Agha_Aslam.c -o ../minishell && ./shtest ../minishell
