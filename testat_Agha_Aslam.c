@@ -264,20 +264,24 @@ int shell_functionality(int *retFlag) {
 
     if (!fgets(input_line, MAX_LINE, stdin))
     {
-        if (feof(stdin))
-        { // > ctr + d sends EOF (End-Of-File) signal. Therefore we should use this feof() instead
-            handle_sighup(1);
-            clearerr(stdin); // > Needed, because otherwise the Comand Line will behave like the input is always feof.
-            {
-                *retFlag = 3;
-                return 0;   // > No need to read the input when this signal is being given, just go to the next iteration and wait until someone give an inputs!
-            };              
-        }
-        else
-        {
-            printf("[Hint] Unknown Inputs, exit terminal!");
-            return EXIT_FAILURE;
-        }
+        printf("\n");
+        return 0; // EOF
+        //-------------------PROBLEM AREA---------------------
+        // if (feof(stdin))
+        // { // > ctr + d sends EOF (End-Of-File) signal. Therefore we should use this feof() instead
+        //     handle_sighup(1);
+        //     clearerr(stdin); // > Needed, because otherwise the Comand Line will behave like the input is always feof.
+        //     {
+        //         *retFlag = 3;
+        //         return 0;   // > No need to read the input when this signal is being given, just go to the next iteration and wait until someone give an inputs!
+        //     };              
+        // }
+        // else
+        // {
+        //     printf("[Hint] Unknown Inputs, exit terminal!");
+        //     return EXIT_FAILURE;
+        // }
+        //------------------------------------------------------
     }
 
     input_line[strcspn(input_line, "\n")] = '\0'; // > change at the end of the line of the code
