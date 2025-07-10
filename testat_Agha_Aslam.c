@@ -15,10 +15,12 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <errno.h>
-#include <linux/limits.h>
 
 #define MAX_ARGS 100 
 #define MAX_LINE 1024
+#define PATH_MAX 1024   // > This is the maximum length of a path on most systems, including Linux and macOS.
+                        // > Linux may have 4096 bytes, but 1024 is a common limit for many systems.
+                        // > If you want to change this, you can change it to 4096,
 
 #define DEBUG 0 // if you want to disable the debug messages, just change this to 0
 
