@@ -1,0 +1,4 @@
+→ set pid [exp_pid]⏎
+→ true⏎
+→ kill -SIGHUP $pid⏎
+← 0\n

@@ -1,0 +1,71 @@
+#!/bin/sh
+
+tput() { command tput "$@" 2>/dev/null; }
+attr() { tput AF "$1" || tput setaf "$1"; }
+red() { attr 1; }
+green() { attr 2; }
+die() {
+  echo "$@"
+  exit 1
+}
+
+if [ $# -ne 1 ]; then
+  die "Usage: ./shtest <PATH_TO_SHELL>"
+fi
+
+sh_under_test=$(which "$1")
+sh_under_test=$(cd -P -- "$(dirname -- "$sh_under_test")" &&
+  echo "$(pwd -P)/$(basename -- "$sh_under_test")")
+
+if [ ! -x "$sh_under_test" ]; then
+  die "Can't execute $sh_under_test; not running any tests."
+fi
+
+[ -x "$(which expect)" ] || die '"expect" is missing'
+
+workingdir=$(dirname -- "$0")
+
+if [ ! -d "$workingdir/tests" ]; then
+  die "No test directories found in $workingdir."
+fi
+
+# build helpers
+for c in "$workingdir"/helpers/*.c; do
+  exe="$workingdir"/helpers/"$(basename "$c" .c)"
+  # shellcheck disable=SC3013
+  if [ ! -x "$exe" ] || [ "$c" -nt "$exe" ]; then "$c"; fi
+done
+
+log=$(mktemp -t shelltester.XXXXXX)
+errorlog=$(mktemp -t shelltester.error.XXXXXX)
+trap 'rm -f $log' EXIT
+trap 'rm -f $errorlog' EXIT
+
+do_test() {
+  test=$1
+  if >"$log" "$workingdir"/helpers/timeout 5 \
+    "$workingdir"/helpers/harness.tcl "$test" "$sh_under_test"; then
+    printf '%s%s\n' "$(green)" "$(basename "$test")"
+  else
+    printf '%s%s\n' "$(red)" "$(basename "$test")"
+    has_errors=1
+    cat "$log" >>"$errorlog"
+  fi
+}
+
+has_errors=0
+for t in "./tests"/*.t; do
+  do_test "$t"
+done
+
+tput setaf 7
+echo '---------------------------'
+echo 'Final result:'
+echo
+if [ ${has_errors} -eq 1 ]; then
+  cat "$errorlog"
+  die 'Keep working!'
+else
+  echo 'No errors. Good work!'
+  exit 0
+fi
